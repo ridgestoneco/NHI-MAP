@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NHI Map</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e1e4e8; }
+
+        .header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+        .header h1 { font-size: 20px; font-weight: 600; }
+        .header h1 span { color: #58a6ff; }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+        /* Stats cards */
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; }
+        .stat-card .label { font-size: 12px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+        .stat-card .value.aws { color: #f0883e; }
+        .stat-card .value.azure { color: #58a6ff; }
+        .stat-card .value.total { color: #3fb950; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 0; border-bottom: 1px solid #30363d; margin-bottom: 24px; }
+        .tab { padding: 12px 20px; cursor: pointer; color: #8b949e; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .tab:hover { color: #e1e4e8; }
+        .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Controls */
+        .controls { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+        .controls input, .controls select { background: #0d1117; border: 1px solid #30363d; color: #e1e4e8; padding: 8px 12px; border-radius: 6px; font-size: 14px; }
+        .controls input { flex: 1; min-width: 200px; }
+
+        /* Buttons */
+        .btn { padding: 8px 16px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #e1e4e8; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+        .btn:hover { background: #30363d; }
+        .btn-primary { background: #238636; border-color: #2ea043; }
+        .btn-primary:hover { background: #2ea043; }
+        .btn-danger { background: #da3633; border-color: #f85149; }
+        .btn-danger:hover { background: #f85149; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Table */
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid #21262d; }
+        th { background: #161b22; color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; position: sticky; top: 0; }
+        tr:hover { background: #161b22; }
+
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+        .badge-aws { background: #f0883e22; color: #f0883e; }
+        .badge-azure { background: #58a6ff22; color: #58a6ff; }
+        .badge-active { background: #3fb95022; color: #3fb950; }
+        .badge-inactive { background: #da363322; color: #f85149; }
+        .badge-type { background: #8b949e22; color: #8b949e; }
+
+        /* Account form */
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 4px; }
+        .form-group input, .form-group select { width: 100%; background: #0d1117; border: 1px solid #30363d; color: #e1e4e8; padding: 8px 12px; border-radius: 6px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+
+        /* Detail panel */
+        .detail-panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-top: 16px; }
+        .detail-panel h3 { margin-bottom: 12px; color: #58a6ff; }
+        .detail-row { display: flex; padding: 6px 0; border-bottom: 1px solid #21262d; }
+        .detail-label { width: 180px; color: #8b949e; font-size: 13px; flex-shrink: 0; }
+        .detail-value { font-size: 13px; word-break: break-all; }
+        pre.metadata { background: #0d1117; padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-top: 12px; color: #8b949e; }
+
+        .clickable { cursor: pointer; color: #58a6ff; }
+        .clickable:hover { text-decoration: underline; }
+
+        .empty { text-align: center; padding: 40px; color: #8b949e; }
+        .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.6s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .toast { position: fixed; bottom: 24px; right: 24px; background: #161b22; border: 1px solid #30363d; padding: 12px 20px; border-radius: 8px; z-index: 1000; animation: slideIn 0.3s; }
+        @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .stat-card .clickable { cursor: pointer; }
+        .stat-card .clickable:hover { text-decoration: underline; }
+        .new-list { margin-top: 12px; }
+        .new-list .new-item { padding: 6px 0; border-bottom: 1px solid #21262d; font-size: 13px; }
+        .new-item .provider { margin-left: 8px; }
+
+        .badge-critical { background: #f8514922; color: #f85149; }
+        .badge-high { background: #f0883e22; color: #f0883e; }
+        .badge-medium { background: #d2992222; color: #d29922; }
+        .badge-low { background: #3fb95022; color: #3fb950; }
+        .finding-item { padding: 4px 0; font-size: 13px; color: #e1e4e8; border-bottom: 1px solid #21262d; }
+        .finding-item:last-child { border-bottom: none; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="header">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <img src="/static/logo.png" alt="NHI Map" style="height:48px;width:48px;margin:-8px 0;">
+            <h1><span>NHI</span> Map</h1>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button class="btn btn-danger" onclick="clearAll()">Clear All</button>
+            <button class="btn" onclick="exportCSV()">Export CSV</button>
+            <button class="btn btn-primary" onclick="crawlAll()">Crawl All Accounts</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="stats" id="stats">
+            <div class="stat-card"><div class="label">Total Identities</div><div class="value total" id="stat-total">-</div></div>
+            <div class="stat-card"><div class="label">AWS</div><div class="value aws" id="stat-aws">-</div></div>
+            <div class="stat-card"><div class="label">Azure</div><div class="value azure" id="stat-azure">-</div></div>
+            <div class="stat-card"><div class="label">Accounts</div><div class="value" id="stat-accounts">-</div></div>
+            <div class="stat-card"><div class="label">Last Crawl</div><div class="value" id="stat-last-crawl" style="font-size:14px;">-</div></div>
+            <div class="stat-card clickable" onclick="switchTab('trends')" title="Click to view">
+                <div class="label">Since Last Crawl</div>
+                <div style="display:flex;gap:12px;margin-top:4px;">
+                    <span style="font-size:20px;font-weight:700;color:#3fb950;" id="stat-added">-</span>
+                    <span style="font-size:20px;font-weight:700;color:#f85149;" id="stat-removed">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="identities" onclick="switchTab('identities')">Identities</div>
+            <div class="tab" data-tab="accounts" onclick="switchTab('accounts')">Accounts</div>
+            <div class="tab" data-tab="trends" onclick="switchTab('trends')">Trends</div>
+            <div class="tab" data-tab="risk" onclick="switchTab('risk')">Risk</div>
+            <div class="tab" data-tab="diff" onclick="switchTab('diff')">Diff</div>
+            <div class="tab" data-tab="history" onclick="switchTab('history')">Crawl History</div>
+        </div>
+
+        <!-- Identities Tab -->
+        <div class="tab-content active" id="tab-identities">
+            <div class="controls">
+                <input type="text" id="search" placeholder="Search identities..." oninput="debounce(loadIdentities, 300)()">
+                <select id="filter-provider" onchange="loadIdentities()">
+                    <option value="">All Providers</option>
+                    <option value="aws">AWS</option>
+                    <option value="azure">Azure</option>
+                </select>
+                <select id="filter-type" onchange="loadIdentities()">
+                    <option value="">All Types</option>
+                    <option value="iam_role">IAM Role</option>
+                    <option value="iam_user_service_account">IAM Service Account</option>
+                    <option value="instance_profile">Instance Profile</option>
+                    <option value="oidc_provider">OIDC Provider</option>
+                    <option value="saml_provider">SAML Provider</option>
+                    <option value="service_principal">Service Principal</option>
+                    <option value="app_registration">App Registration</option>
+                    <option value="managed_identity">Managed Identity</option>
+                </select>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Provider</th>
+                        <th>Type</th>
+                        <th>Sub-Type</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Last Used</th>
+                    </tr>
+                </thead>
+                <tbody id="identities-table"></tbody>
+            </table>
+
+            <div id="identity-detail"></div>
+        </div>
+
+        <!-- Accounts Tab -->
+        <div class="tab-content" id="tab-accounts">
+            <div class="card">
+                <h3 style="margin-bottom:16px;">Detect Accounts</h3>
+                <p style="color:#8b949e;font-size:13px;margin-bottom:16px;">Auto-detect accounts from active CLI sessions. Make sure you're logged in first.</p>
+                <div style="display:flex;gap:12px;">
+                    <button class="btn" onclick="detectAccount('aws')" style="border-color:#f0883e;color:#f0883e;">Detect AWS Account</button>
+                    <button class="btn" onclick="detectAccount('azure')" style="border-color:#58a6ff;color:#58a6ff;">Detect Azure Tenant</button>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Label</th>
+                        <th>Provider</th>
+                        <th>Account/Tenant ID</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="accounts-table"></tbody>
+            </table>
+        </div>
+
+        <!-- Trends Tab -->
+        <div class="tab-content" id="tab-trends">
+            <div class="card">
+                <h3 style="margin-bottom:16px;">Identity Count — Last 7 Days</h3>
+                <canvas id="trend-chart" height="80"></canvas>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div class="card" id="added-card" style="display:none;">
+                    <h3 style="margin-bottom:12px;color:#3fb950;" id="added-title">Added</h3>
+                    <div id="added-list" class="new-list"></div>
+                </div>
+                <div class="card" id="removed-card" style="display:none;">
+                    <h3 style="margin-bottom:12px;color:#f85149;" id="removed-title">Removed</h3>
+                    <div id="removed-list" class="new-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Risk Tab -->
+        <div class="tab-content" id="tab-risk">
+            <div class="stats" id="risk-summary" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
+                <div class="stat-card"><div class="label">Critical</div><div class="value" id="risk-critical" style="color:#f85149;">-</div></div>
+                <div class="stat-card"><div class="label">High</div><div class="value" id="risk-high" style="color:#f0883e;">-</div></div>
+                <div class="stat-card"><div class="label">Medium</div><div class="value" id="risk-medium" style="color:#d29922;">-</div></div>
+                <div class="stat-card"><div class="label">Low</div><div class="value" id="risk-low" style="color:#3fb950;">-</div></div>
+            </div>
+            <div class="controls" style="margin-bottom:16px;">
+                <select id="risk-filter" onchange="filterRisk()" style="background:#0d1117;border:1px solid #30363d;color:#e1e4e8;padding:8px 12px;border-radius:6px;">
+                    <option value="">All Levels</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Risk</th>
+                        <th>Score</th>
+                        <th>Name</th>
+                        <th>Provider</th>
+                        <th>Type</th>
+                        <th>Findings</th>
+                    </tr>
+                </thead>
+                <tbody id="risk-table"></tbody>
+            </table>
+            <div id="risk-detail"></div>
+        </div>
+
+        <!-- Diff Tab -->
+        <div class="tab-content" id="tab-diff">
+            <div class="card">
+                <h3 style="margin-bottom:16px;">Compare Crawl Dates</h3>
+                <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label>From (earlier)</label>
+                        <select id="diff-date-a" style="width:200px;background:#0d1117;border:1px solid #30363d;color:#e1e4e8;padding:8px 12px;border-radius:6px;"></select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label>To (later)</label>
+                        <select id="diff-date-b" style="width:200px;background:#0d1117;border:1px solid #30363d;color:#e1e4e8;padding:8px 12px;border-radius:6px;"></select>
+                    </div>
+                    <button class="btn btn-primary" onclick="runDiff()">Compare</button>
+                </div>
+            </div>
+            <div id="diff-summary" style="display:none;" class="card">
+                <div style="display:flex;gap:24px;align-items:center;">
+                    <span style="font-size:14px;color:#8b949e;" id="diff-summary-text"></span>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div class="card" id="diff-added-card" style="display:none;">
+                    <h3 style="margin-bottom:12px;color:#3fb950;" id="diff-added-title">Added</h3>
+                    <div id="diff-added-list" class="new-list"></div>
+                </div>
+                <div class="card" id="diff-removed-card" style="display:none;">
+                    <h3 style="margin-bottom:12px;color:#f85149;" id="diff-removed-title">Removed</h3>
+                    <div id="diff-removed-list" class="new-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Tab -->
+        <div class="tab-content" id="tab-history">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Started</th>
+                        <th>Finished</th>
+                        <th>Status</th>
+                        <th>Identities Found</th>
+                        <th>Error</th>
+                    </tr>
+                </thead>
+                <tbody id="history-table"></tbody>
+            </table>
+        </div>
+    </div>
+
+<script>
+const API = '';  // Same origin
+
+function toast(msg, isError) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.style.borderColor = isError ? '#f85149' : '#3fb950';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+}
+
+async function api(path, opts = {}) {
+    const res = await fetch(API + path, {
+        headers: { 'Content-Type': 'application/json', ...opts.headers },
+        ...opts,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || 'Request failed');
+    }
+    return res.json();
+}
+
+function fmtDate(d) {
+    if (!d) return '-';
+    return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function fmtDateTime(d) {
+    if (!d) return '-';
+    return new Date(d).toLocaleString();
+}
+
+// Tabs
+function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
+    if (name === 'accounts') loadAccounts();
+    if (name === 'identities') loadIdentities();
+    if (name === 'trends') loadTrends();
+    if (name === 'risk') loadRisk();
+    if (name === 'diff') loadDiff();
+    if (name === 'history') loadHistory();
+}
+
+// Debounce
+function debounce(fn, ms) {
+    let timer;
+    return function() { clearTimeout(timer); timer = setTimeout(fn, ms); };
+}
+
+// Stats
+async function loadStats() {
+    try {
+        const s = await api('/api/stats');
+        document.getElementById('stat-total').textContent = s.total_identities;
+        document.getElementById('stat-aws').textContent = s.by_provider.aws || 0;
+        document.getElementById('stat-azure').textContent = s.by_provider.azure || 0;
+        document.getElementById('stat-accounts').textContent = s.accounts;
+        document.getElementById('stat-last-crawl').textContent = s.last_crawl ? fmtDateTime(s.last_crawl) : 'Never';
+    } catch (e) { console.error('Stats error:', e); }
+
+    // Also fetch new/removed counts for the stat card
+    try {
+        const t = await api('/api/trends');
+        document.getElementById('stat-added').textContent = '+' + t.new_since_last.length;
+        document.getElementById('stat-removed').textContent = '-' + t.removed_since_last.length;
+    } catch (e) { console.error('Trends stat error:', e); }
+}
+
+// Identities
+async function loadIdentities() {
+    const search = document.getElementById('search').value;
+    const provider = document.getElementById('filter-provider').value;
+    const type = document.getElementById('filter-type').value;
+
+    let url = '/api/identities?limit=200';
+    if (search) url += '&search=' + encodeURIComponent(search);
+    if (provider) url += '&provider=' + provider;
+    if (type) url += '&identity_type=' + type;
+
+    try {
+        const data = await api(url);
+        const tbody = document.getElementById('identities-table');
+        if (!data.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">No identities found. Add accounts and run a crawl.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.map(i => `
+            <tr>
+                <td class="clickable" onclick="showDetail('${i.id}')">${esc(i.name)}</td>
+                <td><span class="badge badge-${i.provider}">${i.provider.toUpperCase()}</span></td>
+                <td><span class="badge badge-type">${i.identity_type.replace(/_/g, ' ')}</span></td>
+                <td>${esc(i.sub_type || '-')}</td>
+                <td><span class="badge ${i.is_active ? 'badge-active' : 'badge-inactive'}">${i.is_active ? 'Active' : 'Inactive'}</span></td>
+                <td>${fmtDate(i.cloud_created_at)}</td>
+                <td>${fmtDate(i.last_used_at)}</td>
+            </tr>
+        `).join('');
+    } catch (e) { toast(e.message, true); }
+}
+
+async function showDetail(id) {
+    try {
+        const [identity, creds] = await Promise.all([
+            api('/api/identities/' + id),
+            api('/api/identities/' + id + '/credentials'),
+        ]);
+
+        let html = `<div class="detail-panel">
+            <h3>${esc(identity.name)}</h3>
+            <div class="detail-row"><div class="detail-label">Provider</div><div class="detail-value">${identity.provider.toUpperCase()}</div></div>
+            <div class="detail-row"><div class="detail-label">Type</div><div class="detail-value">${identity.identity_type}</div></div>
+            <div class="detail-row"><div class="detail-label">Sub-Type</div><div class="detail-value">${identity.sub_type || '-'}</div></div>
+            <div class="detail-row"><div class="detail-label">Unique ID / ARN</div><div class="detail-value">${esc(identity.unique_id)}</div></div>
+            <div class="detail-row"><div class="detail-label">Active</div><div class="detail-value">${identity.is_active ? 'Yes' : 'No'}</div></div>
+            <div class="detail-row"><div class="detail-label">Created (Cloud)</div><div class="detail-value">${fmtDateTime(identity.cloud_created_at)}</div></div>
+            <div class="detail-row"><div class="detail-label">Last Used</div><div class="detail-value">${fmtDateTime(identity.last_used_at)}</div></div>
+            <div class="detail-row"><div class="detail-label">Discovered</div><div class="detail-value">${fmtDateTime(identity.discovered_at)}</div></div>`;
+
+        if (creds.length) {
+            html += '<h3 style="margin-top:16px;">Credentials (' + creds.length + ')</h3>';
+            html += '<table><thead><tr><th>Type</th><th>Name/ID</th><th>Status</th><th>Created</th><th>Expires</th><th>Last Used</th></tr></thead><tbody>';
+            for (const c of creds) {
+                const isExpired = c.expires_at && new Date(c.expires_at) < new Date();
+                html += `<tr>
+                    <td>${c.credential_type}</td>
+                    <td>${esc(c.display_name || c.key_id || '-')}</td>
+                    <td>${c.status || '-'}</td>
+                    <td>${fmtDate(c.created_at)}</td>
+                    <td style="color:${isExpired ? '#f85149' : 'inherit'}">${fmtDate(c.expires_at)}${isExpired ? ' (EXPIRED)' : ''}</td>
+                    <td>${fmtDate(c.last_used_at)}</td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+        }
+
+        if (identity.extra_data) {
+            html += '<h3 style="margin-top:16px;">Metadata</h3>';
+            html += '<pre class="metadata">' + esc(JSON.stringify(identity.extra_data, null, 2)) + '</pre>';
+        }
+
+        html += '</div>';
+        document.getElementById('identity-detail').innerHTML = html;
+    } catch (e) { toast(e.message, true); }
+}
+
+// Accounts
+async function loadAccounts() {
+    try {
+        const data = await api('/api/accounts');
+        const tbody = document.getElementById('accounts-table');
+        if (!data.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty">No accounts configured. Add one above.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.map(a => `
+            <tr>
+                <td>${esc(a.label)}</td>
+                <td><span class="badge badge-${a.provider}">${a.provider.toUpperCase()}</span></td>
+                <td>${esc(a.account_id)}${a.subscription_id ? '<br><small>' + esc(a.subscription_id) + '</small>' : ''}</td>
+                <td><span class="badge ${a.enabled ? 'badge-active' : 'badge-inactive'}">${a.enabled ? 'Enabled' : 'Disabled'}</span></td>
+                <td>
+                    <button class="btn" onclick="crawlAccount('${a.id}')">Crawl</button>
+                    <button class="btn" onclick="toggleAccount('${a.id}')">${a.enabled ? 'Disable' : 'Enable'}</button>
+                    <button class="btn btn-danger" onclick="deleteAccount('${a.id}')">Delete</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) { toast(e.message, true); }
+}
+
+async function detectAccount(provider) {
+    const btn = event.target;
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Detecting...';
+    try {
+        const result = await api('/api/detect/' + provider, { method: 'POST' });
+        toast(provider.toUpperCase() + ' account detected: ' + result.label);
+        loadAccounts();
+        loadStats();
+    } catch (e) { toast(e.message, true); }
+    finally { btn.innerHTML = orig; btn.disabled = false; }
+}
+
+async function deleteAccount(id) {
+    if (!confirm('Delete this account and all its data?')) return;
+    try {
+        await api('/api/accounts/' + id, { method: 'DELETE' });
+        toast('Account deleted');
+        loadAccounts();
+        loadStats();
+    } catch (e) { toast(e.message, true); }
+}
+
+async function toggleAccount(id) {
+    try {
+        await api('/api/accounts/' + id + '/toggle', { method: 'PATCH' });
+        loadAccounts();
+    } catch (e) { toast(e.message, true); }
+}
+
+async function crawlAccount(id) {
+    const btn = event.target;
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Crawling...';
+    try {
+        const result = await api('/api/crawl/' + id, { method: 'POST' });
+        toast('Crawl complete: ' + result.identities_found + ' identities found');
+        loadIdentities();
+        loadStats();
+    } catch (e) { toast(e.message, true); }
+    finally { btn.innerHTML = orig; btn.disabled = false; }
+}
+
+async function crawlAll() {
+    const btn = event.target;
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Crawling...';
+    try {
+        const result = await api('/api/crawl', { method: 'POST' });
+        const summary = result.results.map(r => r.account + ': ' + r.status).join(', ');
+        toast('Done - ' + summary);
+        loadIdentities();
+        loadStats();
+    } catch (e) { toast(e.message, true); }
+    finally { btn.innerHTML = orig; btn.disabled = false; }
+}
+
+// Trends
+let trendChart = null;
+async function loadTrends() {
+    try {
+        const data = await api('/api/trends');
+
+        // Update stat card
+        document.getElementById('stat-added').textContent = '+' + data.new_since_last.length;
+        document.getElementById('stat-removed').textContent = '-' + data.removed_since_last.length;
+
+        // Chart
+        const ctx = document.getElementById('trend-chart').getContext('2d');
+        if (trendChart) trendChart.destroy();
+
+        const labels = data.daily.map(d => {
+            const dt = new Date(d.date + 'T00:00:00');
+            return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+
+        trendChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Total', data: data.daily.map(d => d.total), borderColor: '#3fb950', backgroundColor: '#3fb95022', tension: 0.3, fill: true },
+                    { label: 'AWS', data: data.daily.map(d => d.aws), borderColor: '#f0883e', backgroundColor: 'transparent', tension: 0.3 },
+                    { label: 'Azure', data: data.daily.map(d => d.azure), borderColor: '#58a6ff', backgroundColor: 'transparent', tension: 0.3 },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { labels: { color: '#8b949e' } } },
+                scales: {
+                    x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+                    y: { beginAtZero: true, ticks: { color: '#8b949e', precision: 0 }, grid: { color: '#21262d' } },
+                },
+            },
+        });
+
+        // Added items
+        const addedCard = document.getElementById('added-card');
+        const addedList = document.getElementById('added-list');
+        const addedTitle = document.getElementById('added-title');
+        addedCard.style.display = '';
+        if (data.new_since_last.length) {
+            addedTitle.textContent = `Added (${data.new_since_last.length})`;
+            addedList.innerHTML = data.new_since_last.map(i => `
+                <div class="new-item">
+                    <span class="badge badge-${i.provider}">${i.provider.toUpperCase()}</span>
+                    <span class="provider">${esc(i.name)}</span>
+                    <span class="badge badge-type" style="margin-left:8px;">${i.identity_type.replace(/_/g, ' ')}</span>
+                </div>
+            `).join('');
+        } else {
+            addedTitle.textContent = 'Added';
+            addedList.innerHTML = '<div class="empty" style="padding:20px;">None</div>';
+        }
+
+        // Removed items
+        const removedCard = document.getElementById('removed-card');
+        const removedList = document.getElementById('removed-list');
+        const removedTitle = document.getElementById('removed-title');
+        removedCard.style.display = '';
+        if (data.removed_since_last.length) {
+            removedTitle.textContent = `Removed (${data.removed_since_last.length})`;
+            removedList.innerHTML = data.removed_since_last.map(i => `
+                <div class="new-item">
+                    <span class="badge badge-${i.provider}">${i.provider.toUpperCase()}</span>
+                    <span class="provider">${esc(i.name)}</span>
+                    <span class="badge badge-type" style="margin-left:8px;">${i.identity_type.replace(/_/g, ' ')}</span>
+                </div>
+            `).join('');
+        } else {
+            removedTitle.textContent = 'Removed';
+            removedList.innerHTML = '<div class="empty" style="padding:20px;">None</div>';
+        }
+    } catch (e) { console.error('Trends error:', e); }
+}
+
+// Risk
+let riskData = [];
+async function loadRisk() {
+    try {
+        const data = await api('/api/risk');
+        riskData = data.identities;
+
+        document.getElementById('risk-critical').textContent = data.summary.critical;
+        document.getElementById('risk-high').textContent = data.summary.high;
+        document.getElementById('risk-medium').textContent = data.summary.medium;
+        document.getElementById('risk-low').textContent = data.summary.low;
+
+        renderRisk(riskData);
+    } catch (e) { console.error('Risk error:', e); }
+}
+
+function filterRisk() {
+    const level = document.getElementById('risk-filter').value;
+    const filtered = level ? riskData.filter(r => r.level === level) : riskData;
+    renderRisk(filtered);
+}
+
+function renderRisk(items) {
+    const tbody = document.getElementById('risk-table');
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">No identities to score. Run a crawl first.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = items.map(r => `
+        <tr class="clickable" onclick="showRiskDetail('${r.identity_id}')">
+            <td><span class="badge badge-${r.level}">${r.level.toUpperCase()}</span></td>
+            <td style="font-weight:700;color:${r.level === 'critical' ? '#f85149' : r.level === 'high' ? '#f0883e' : r.level === 'medium' ? '#d29922' : '#3fb950'};">${r.score}</td>
+            <td>${esc(r.name)}</td>
+            <td><span class="badge badge-${r.provider}">${r.provider.toUpperCase()}</span></td>
+            <td><span class="badge badge-type">${r.identity_type.replace(/_/g, ' ')}</span></td>
+            <td>${r.findings.length ? r.findings.length + ' finding' + (r.findings.length > 1 ? 's' : '') : '<span style="color:#3fb950;">Clean</span>'}</td>
+        </tr>
+    `).join('');
+}
+
+function showRiskDetail(id) {
+    const item = riskData.find(r => r.identity_id === id);
+    if (!item) return;
+
+    let html = `<div class="detail-panel">
+        <h3>${esc(item.name)} <span class="badge badge-${item.level}" style="margin-left:8px;">${item.level.toUpperCase()} (${item.score})</span></h3>
+        <div class="detail-row"><div class="detail-label">Provider</div><div class="detail-value">${item.provider.toUpperCase()}</div></div>
+        <div class="detail-row"><div class="detail-label">Type</div><div class="detail-value">${item.identity_type.replace(/_/g, ' ')}</div></div>
+        <div class="detail-row"><div class="detail-label">Unique ID</div><div class="detail-value">${esc(item.unique_id)}</div></div>
+        <div class="detail-row"><div class="detail-label">Credentials</div><div class="detail-value">${item.credential_count}</div></div>
+        <h3 style="margin-top:16px;">Findings (${item.findings.length})</h3>`;
+
+    if (item.findings.length) {
+        html += item.findings.map(f => `<div class="finding-item">&#9888; ${esc(f)}</div>`).join('');
+    } else {
+        html += '<div style="color:#3fb950;padding:8px 0;">No risk findings</div>';
+    }
+
+    html += '</div>';
+    document.getElementById('risk-detail').innerHTML = html;
+}
+
+// Diff
+async function loadDiff() {
+    try {
+        const dates = await api('/api/diff/dates');
+        const selA = document.getElementById('diff-date-a');
+        const selB = document.getElementById('diff-date-b');
+        const prevA = selA.value;
+        const prevB = selB.value;
+        selA.innerHTML = dates.map(d => `<option value="${d}">${new Date(d + 'T00:00:00').toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'})}</option>`).join('');
+        selB.innerHTML = dates.map(d => `<option value="${d}">${new Date(d + 'T00:00:00').toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'})}</option>`).join('');
+        // Default: date A = second most recent (or first), date B = most recent
+        if (prevA) selA.value = prevA;
+        else if (dates.length > 1) selA.value = dates[1];
+        if (prevB) selB.value = prevB;
+        else if (dates.length > 0) selB.value = dates[0];
+    } catch (e) { console.error('Diff dates error:', e); }
+}
+
+async function runDiff() {
+    const dateA = document.getElementById('diff-date-a').value;
+    const dateB = document.getElementById('diff-date-b').value;
+    if (!dateA || !dateB) { toast('Select two dates', true); return; }
+    if (dateA === dateB) { toast('Select two different dates', true); return; }
+
+    try {
+        const data = await api(`/api/diff?date_a=${dateA}&date_b=${dateB}`);
+
+        // Summary
+        const summary = document.getElementById('diff-summary');
+        summary.style.display = '';
+        document.getElementById('diff-summary-text').innerHTML =
+            `<span style="color:#3fb950;font-weight:700;font-size:20px;">+${data.added.length}</span> added &nbsp;&nbsp;` +
+            `<span style="color:#f85149;font-weight:700;font-size:20px;">-${data.removed.length}</span> removed &nbsp;&nbsp;` +
+            `<span style="color:#8b949e;font-size:14px;">${data.unchanged_count} unchanged</span>`;
+
+        // Added
+        const addedCard = document.getElementById('diff-added-card');
+        const addedList = document.getElementById('diff-added-list');
+        addedCard.style.display = '';
+        document.getElementById('diff-added-title').textContent = `Added (${data.added.length})`;
+        if (data.added.length) {
+            addedList.innerHTML = data.added.map(i => `
+                <div class="new-item">
+                    <span class="badge badge-${i.provider}">${i.provider.toUpperCase()}</span>
+                    <span class="provider">${esc(i.name)}</span>
+                    <span class="badge badge-type" style="margin-left:8px;">${i.identity_type.replace(/_/g, ' ')}</span>
+                </div>
+            `).join('');
+        } else {
+            addedList.innerHTML = '<div class="empty" style="padding:20px;">None</div>';
+        }
+
+        // Removed
+        const removedCard = document.getElementById('diff-removed-card');
+        const removedList = document.getElementById('diff-removed-list');
+        removedCard.style.display = '';
+        document.getElementById('diff-removed-title').textContent = `Removed (${data.removed.length})`;
+        if (data.removed.length) {
+            removedList.innerHTML = data.removed.map(i => `
+                <div class="new-item">
+                    <span class="badge badge-${i.provider}">${i.provider.toUpperCase()}</span>
+                    <span class="provider">${esc(i.name)}</span>
+                    <span class="badge badge-type" style="margin-left:8px;">${i.identity_type.replace(/_/g, ' ')}</span>
+                </div>
+            `).join('');
+        } else {
+            removedList.innerHTML = '<div class="empty" style="padding:20px;">None</div>';
+        }
+    } catch (e) { toast(e.message, true); }
+}
+
+// History
+async function loadHistory() {
+    try {
+        const data = await api('/api/crawl-runs');
+        const tbody = document.getElementById('history-table');
+        if (!data.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty">No crawl history yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.map(r => `
+            <tr>
+                <td>${fmtDateTime(r.started_at)}</td>
+                <td>${fmtDateTime(r.finished_at)}</td>
+                <td><span class="badge ${r.status === 'completed' ? 'badge-active' : r.status === 'failed' ? 'badge-inactive' : 'badge-type'}">${r.status}</span></td>
+                <td>${r.identity_count}</td>
+                <td style="color:#f85149;font-size:13px;">${esc(r.error_message || '')}</td>
+            </tr>
+        `).join('');
+    } catch (e) { toast(e.message, true); }
+}
+
+function esc(s) {
+    if (!s) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+// Clear all
+async function clearAll() {
+    if (!confirm('Are you sure you want to delete ALL data? This removes all accounts, identities, credentials, and crawl history.')) return;
+    try {
+        await api('/api/clear', { method: 'DELETE' });
+        toast('All data cleared');
+        loadStats();
+        loadIdentities();
+        if (trendChart) { trendChart.destroy(); trendChart = null; }
+        document.getElementById('added-card').style.display = 'none';
+        document.getElementById('removed-card').style.display = 'none';
+        document.getElementById('diff-summary').style.display = 'none';
+        document.getElementById('diff-added-card').style.display = 'none';
+        document.getElementById('diff-removed-card').style.display = 'none';
+    } catch (e) { toast(e.message, true); }
+}
+
+// Export
+async function exportCSV() {
+    try {
+        const res = await fetch(API + '/api/export/csv');
+        if (!res.ok) throw new Error('Export failed');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.headers.get('Content-Disposition')?.split('filename=')[1] || 'nhi_export.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        toast('Export downloaded');
+    } catch (e) { toast(e.message, true); }
+}
+
+// Init
+loadStats();
+loadIdentities();
+</script>
+</body>
+</html>
